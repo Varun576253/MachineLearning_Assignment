@@ -1,0 +1,3 @@
+# Preserve the supplied CSV files and generated PDF bytes across platforms.
+*.csv -text
+*.pdf -text
