@@ -48,7 +48,7 @@ Model selection uses shuffled 5-fold cross-validation repeated twice (10 validat
 
 ## 6. Reproduction
 
-To reproduce my results, place the five instructor-provided CSV files listed below in `data/`. I used Python 3.12. From the project root, run these commands in Windows PowerShell to create the environment, install the required packages, repeat model selection, and generate the prediction files. The input files are read without modification.
+The five instructor-provided CSV files listed below are included in `data/`. I used Python 3.12. From the project root, run these commands in Windows PowerShell to create the environment, install the required packages, repeat model selection, and generate the prediction files. The input files are read without modification.
 
 Required input files:
 
