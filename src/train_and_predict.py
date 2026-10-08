@@ -16,6 +16,7 @@ import sklearn
 from model_selection import (
     RANDOM_SEED,
     RIDGE_ALPHAS,
+    evaluate_lasso_alphas,
     evaluate_ridge_alphas,
     make_pipeline,
     select_model,
@@ -26,8 +27,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = PROJECT_ROOT / "data"
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs"
 PROBLEMS = {"var1": 10, "var2": 20}
+LASSO_ALPHAS: dict[str, tuple[float, ...] | None] = {
+    "var1": (0.003, 0.005, 0.007, 0.01, 0.015, 0.02, 0.03, 0.05, 0.1),
+    "var2": None,
+}
 FOCUSED_ALPHAS = {
-    "var1": (1.0, 3.0, 5.0, 7.0, 10.0, 15.0, 20.0, 30.0, 50.0),
+    "var1": (0.003, 0.005, 0.007, 0.008, 0.01, 0.012, 0.015, 0.02),
     "var2": (0.1, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 5.0),
 }
 MIN_RELATIVE_MSE_IMPROVEMENT = 0.01
@@ -46,21 +51,26 @@ def _refine_alpha(
     output_dir: Path,
 ) -> tuple[dict[str, Any], pd.DataFrame, dict[str, Any]]:
     """Compare a focused alpha set on the existing degree and CV procedure."""
-    if selected["family"] != "Ridge" or selected["alpha"] is None:
-        raise ValueError(f"Expected the established Ridge selection for {variable}.")
+    family = selected["family"]
+    if family not in ("Ridge", "Lasso") or selected["alpha"] is None:
+        raise ValueError(f"Expected a regularized selection for {variable}, got {family}.")
 
     degree = int(selected["degree"])
     baseline_alpha = float(selected["alpha"])
     focused = FOCUSED_ALPHAS[variable]
-    known_alphas = tuple(float(alpha) for alpha in selected["ridge_alphas"])
+    known_alphas_key = "lasso_alphas" if family == "Lasso" else "ridge_alphas"
+    known_alphas = tuple(float(alpha) for alpha in selected.get(known_alphas_key, []))
     missing_alphas = tuple(alpha for alpha in focused if alpha not in known_alphas)
-    new_results = (
-        evaluate_ridge_alphas(X, y, degree, missing_alphas, label=variable)
-        if missing_alphas
-        else pd.DataFrame()
-    )
+    if missing_alphas:
+        if family == "Lasso":
+            new_results = evaluate_lasso_alphas(X, y, degree, missing_alphas, label=variable)
+        else:
+            new_results = evaluate_ridge_alphas(X, y, degree, missing_alphas, label=variable)
+    else:
+        new_results = pd.DataFrame()
+
     base = cv_results[
-        (cv_results["family"] == "Ridge")
+        (cv_results["family"] == family)
         & (cv_results["degree"] == degree)
         & np.isclose(cv_results["alpha"], baseline_alpha)
     ].iloc[0]
@@ -70,7 +80,7 @@ def _refine_alpha(
     for alpha in focused:
         if alpha in known_alphas:
             row = cv_results[
-                (cv_results["family"] == "Ridge")
+                (cv_results["family"] == family)
                 & (cv_results["degree"] == degree)
                 & np.isclose(cv_results["alpha"], alpha)
             ].iloc[0]
@@ -113,13 +123,19 @@ def _refine_alpha(
     final_selected = selected
     final_results = cv_results
     if meaningful:
-        expanded_alphas = tuple(sorted(set(RIDGE_ALPHAS).union(focused)))
+        if family == "Lasso":
+            expanded_lasso = tuple(sorted(set(LASSO_ALPHAS[variable] or ()).union(focused)))
+            expanded_ridge = RIDGE_ALPHAS
+        else:
+            expanded_lasso = LASSO_ALPHAS.get(variable)
+            expanded_ridge = tuple(sorted(set(RIDGE_ALPHAS).union(focused)))
         final_selected, final_results = select_model(
             X,
             y,
             max_degree=PROBLEMS[variable],
             label=f"{variable} refined full search",
-            ridge_alphas=expanded_alphas,
+            ridge_alphas=expanded_ridge,
+            lasso_alphas=expanded_lasso,
         )
         rerun = True
 
@@ -272,6 +288,7 @@ def run(data_dir: Path, output_dir: Path) -> dict[str, Any]:
             y_train,
             max_degree=max_degree,
             label=variable,
+            lasso_alphas=LASSO_ALPHAS.get(variable),
         )
         selected, cv_results, alpha_refinement = _refine_alpha(
             X_train,

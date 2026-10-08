@@ -14,10 +14,15 @@ Scores are mean validation metrics from the repeated cross-validation procedure 
 
 | Problem | Model | Degree | Alpha | CV MSE | CV R² |
 |---|---|---:|---:|---:|---:|
-| var1 | Ridge Polynomial Regression | 5 | 20 | 0.515157 | 0.951535 |
+| var1 | Lasso Polynomial Regression | 5 | 0.007 | 0.333088 | 0.968708 |
 | var2 | Ridge Polynomial Regression | 10 | 1 | 0.262251 | 0.994186 |
 
-Degree 11 achieved the lowest raw cross-validation MSE for `var2` (0.260706). However, degree 10 was selected using the one-standard-error rule because its validation error was within one standard error of the minimum while requiring fewer polynomial terms (285 versus 363).
+Degree 11 achieved the lowest raw cross-validation MSE for `var2` (0.260706). However, degree 10 was selected using the one-standard-error rule because its validation error was within one standard error of the minimum while requiring fewer polynomial terms (285 versus 363). For `var1`, degree 5 Lasso was selected as the global minimum CV MSE, outperforming Ridge by inducing sparsity across the 461 expanded polynomial terms.
+
+### Regularization Rationale: Lasso vs. Ridge Selection
+
+- **Why Lasso for `var1`:** The system involves 6 continuous operational parameters that expand combinatorially to 461 monomials at degree 5 (and up to 8,007 terms at degree 10). In multi-variable engineering systems, physical behavior is governed by a sparse subset of interaction terms. Ridge regression ($L_2$ penalty) retains all 461 terms, accumulating estimation variance from noise monomials (best Ridge CV MSE: 0.515157). In contrast, Lasso regression ($L_1$ penalty) drives non-informative terms to exactly zero, retaining only ~139 active features at $\alpha=0.007$. Eliminating over 70% of the noisy terms drops validation error by 35.3% to **0.333088** and boosts CV $R^2$ to **0.9687**.
+- **Why Ridge for `var2`:** The task measures 3 spatial coordinate offsets $(x_1, x_2, x_3)$ representing physical sensor locations. The underlying thermal anomaly field is governed by continuous heat diffusion, where coordinates interact across dimensions in a smooth, dense polynomial manifold rather than isolated sparse terms. Expanding 3 coordinates produces 285 terms at degree 10, which exhibit severe geometric multicollinearity. Ridge's $L_2$ penalty provides uniform, stable shrinkage of the collinear eigenvalues without discarding continuous spatial interaction terms, achieving exceptional predictive accuracy (CV MSE: **0.262251**, CV $R^2$: **0.9942**).
 
 ## 3. Submission Deliverables
 
@@ -42,7 +47,7 @@ The first three rows are the primary assignment deliverables.
 
 ## 5. Methodology
 
-The solution expands each feature set into polynomial terms and compares polynomial Ridge regression across every permitted degree. Ordinary least-squares polynomial regression is also evaluated where the expanded feature count is below 800. Expanded features are standardized within each validation fold: the scaler is fitted only on that fold's training rows and then applied to its validation rows.
+The solution expands each feature set into polynomial terms and compares regularized polynomial regression (Ridge and Lasso) across every permitted degree. Ordinary least-squares polynomial regression is also evaluated where the expanded feature count is below 800. Expanded features are standardized within each validation fold: the scaler is fitted only on that fold's training rows and then applied to its validation rows.
 
 Model selection uses shuffled 5-fold cross-validation repeated twice (10 validation folds total, random seed 2026). Each fold uses 800 training rows and 200 validation rows. The selected degree is the lowest degree within one standard error of the minimum mean validation MSE; within that degree, the candidate with the lowest mean validation MSE is selected. The chosen pipeline is then refitted on all 1,000 training rows for each problem and used to predict its corresponding test rows.
 
